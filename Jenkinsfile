@@ -12,6 +12,7 @@ pipeline {
            sh "git branch -a"
            // Checkout to a specific branch in your repo.
            sh "git checkout master"
+		   sh "cp /var/lib/jenkins/workspace/pipelinescript_master/* /var/www/html/"
           }
        }
     }
