@@ -1,0 +1,1089 @@
+version: 2.1
+
+parameters:
+  platform-tag: {type: string, default: 924e01762b31a29c2165e12c1426a3d970afee78} # This line gets automatically updated by `merc assembly set-version`, please don't edit manually
+
+commands:
+  wait_for_postgres:
+    description: 'Wait for Postgres to be ready'
+    steps:
+      - run:
+          name: Install dockerize
+          command: |
+            wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz
+            sudo tar -C /usr/local/bin -xzvf dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz
+            rm dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz
+          environment:
+            DOCKERIZE_VERSION: v0.3.0
+      - run:
+          name: Wait for Postgres to be ready
+          command: dockerize -wait tcp://localhost:5432 -timeout 1m
+
+jobs:
+  # ---------------
+  # Merlon Tooling
+  # ---------------
+
+  autogen_validate:
+    docker:
+      - image: gcr.io/merlon-dev-294616/sdk:<< pipeline.parameters.platform-tag >>
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5432'
+          FLYWAY_START_PORT: '2345'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    environment:
+      - PYTHONDONTWRITEBYTECODE: 1
+    working_directory: ~/project
+    steps:
+      - checkout
+      - run:
+          name: autogen validate
+          command: |
+            set -o xtrace
+            cd autogenerate
+            # we're not forcing the first one explicitly - so if you change example and commit it
+            # breaks so you catch it
+            python3 autogenerate.py --yaml-schema circle.yaml
+            cd ../contracts
+            pytest --contract-path . tests/circle_test.py --skip-validate -s -vvv
+
+            cd ../autogenerate
+            python3 autogenerate.py --yaml-schema circle.yaml --force --template loan_subdomain
+            cd ../contracts
+            pytest --contract-path . tests/circle_test.py --skip-validate -s -vvv
+
+  build_merc:
+    docker:
+      - image: golang:1.13.5-stretch
+    resource_class: small
+    working_directory: /home/project
+    environment:
+      GOPATH: /go
+    steps:
+      - checkout
+      - restore_cache: # restores saved cache if no changes are detected since last run
+          # Read about caching dependencies: https://circleci.com/docs/2.0/caching/
+          keys:
+            - v1-go-pkg-{{ checksum "golang/go.sum" }}
+            - v1-go-pkg- # used if checksum fails
+      - run:
+          working_directory: golang/
+          command: |
+            echo $GO111MODULE
+            echo $GOFLAGS
+            go mod download
+            go build ./cmd/merc
+      - store_artifacts:
+          path: /home/project/golang/merc
+      - persist_to_workspace:
+          root: /home/project/golang/
+          paths:
+            - merc
+      - save_cache: # Store cache in the /go/pkg directory
+          key: v1-go-pkg-{{ checksum "golang/go.sum" }}
+          paths:
+            - '/go/pkg'
+
+  # ------------------
+  # Sailfish contracts
+  # ------------------
+
+  sailfish:
+    docker:
+      - image: gcr.io/merlon-dev-294616/sdk:<< pipeline.parameters.platform-tag >>
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5432'
+          FLYWAY_START_PORT: '2345'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5433'
+          FLYWAY_START_PORT: '2346'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5434'
+          FLYWAY_START_PORT: '2347'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5435'
+          FLYWAY_START_PORT: '2348'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5436'
+          FLYWAY_START_PORT: '2349'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5437'
+          FLYWAY_START_PORT: '2350'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5438'
+          FLYWAY_START_PORT: '2351'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5439'
+          FLYWAY_START_PORT: '2352'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    working_directory: ~/project
+    resource_class: xlarge
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /work
+      - wait_for_postgres
+      - run:
+          name: wait for extra pg instances
+          command: |
+            dockerize -wait tcp://localhost:5433 -timeout 1m
+            dockerize -wait tcp://localhost:5434 -timeout 1m
+            dockerize -wait tcp://localhost:5435 -timeout 1m
+            dockerize -wait tcp://localhost:5436 -timeout 1m
+            dockerize -wait tcp://localhost:5437 -timeout 1m
+            dockerize -wait tcp://localhost:5438 -timeout 1m
+            dockerize -wait tcp://localhost:5439 -timeout 1m
+      - run:
+          name: Execute the contract tests
+          command: |
+            mkdir -p /tmp/test-results
+            /work/merc test contracts \
+              --groups 8 \
+              --junit-output-dir /tmp/test-results \
+              --repo-root $HOME/project \
+              --postgres-base-port 5432
+      - store_test_results:
+          path: /tmp/test-results
+          when: always
+      - store_artifacts:
+          path: /tmp/test-results
+          destination: test-results
+
+  contracts_validate:
+    docker:
+      - image: gcr.io/merlon-dev-294616/sdk:<< pipeline.parameters.platform-tag >>
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    environment:
+      - ASSEMBLY_CONTRACT_PATH: contracts
+      - PYTHONDONTWRITEBYTECODE: 1
+    working_directory: ~/project
+    steps:
+      - checkout
+      - run:
+          name: Validate contracts (and run our autoformatter check)
+          command: |
+            set -o xtrace
+            cd contracts
+            # this specific version is so we don't conflict dependencies with the platform sdk
+            # This version needs to match default on mob machines - see `set_platform_version.go` 
+            pip3 install black==20.8b1 
+            # todo : enable once we run the formatting commit!
+            black . --check 
+            assembly-sdk validate --contract-path $(pwd) .
+
+  documentation:
+    docker:
+      - image: python:3.8 # Running into sphinx problems with 3.9
+    steps:
+      - checkout
+      - run:
+          name: Render documentation with Sphinx
+          working_directory: dev/docs
+          command: |
+            pip install -r requirements.txt
+            mkdir -p build
+            python docs.py
+            make html
+
+      - store_artifacts:
+          path: dev/docs/build/html
+          destination: doc
+
+      - store_artifacts:
+          path: dev/docs/build/schemas.csv
+          destination: schemas.csv
+
+      - store_artifacts:
+          path: dev/docs/build/fns.csv
+          destination: fns.csv
+
+  file_agent_docker:
+    docker:
+      - image: gcr.io/merlon-dev-294616/ci-ops
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    working_directory: ~/project
+    steps:
+      - checkout
+      - setup_remote_docker
+      - attach_workspace:
+          at: /work
+      - run:
+          name: Build image
+          command: |
+            . ~/project/.circleci/gcloud-auth.sh
+
+            /work/merc build file-agent --tag $CIRCLE_SHA1
+            /work/merc push file-agent --tag $CIRCLE_SHA1
+
+  alarm_clock_docker:
+    docker:
+      - image: gcr.io/merlon-dev-294616/ci-ops
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    working_directory: ~/project
+    steps:
+      - checkout
+      - setup_remote_docker
+      - attach_workspace:
+          at: /work
+      - run:
+          name: Build image
+          command: |
+            . ~/project/.circleci/gcloud-auth.sh
+
+            /work/merc build alarm-clock --tag $CIRCLE_SHA1
+            /work/merc push alarm-clock --tag $CIRCLE_SHA1
+
+  # ------------------
+  # FitNesse
+  # ------------------
+
+  fitnesse:
+    docker:
+      - image: gcr.io/merlon-dev-294616/sdk:<< pipeline.parameters.platform-tag >>
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5432'
+          FLYWAY_START_PORT: '2345'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5433'
+          FLYWAY_START_PORT: '2346'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5434'
+          FLYWAY_START_PORT: '2347'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5435'
+          FLYWAY_START_PORT: '2348'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5436'
+          FLYWAY_START_PORT: '2349'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5437'
+          FLYWAY_START_PORT: '2350'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5438'
+          FLYWAY_START_PORT: '2351'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5439'
+          FLYWAY_START_PORT: '2352'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5440'
+          FLYWAY_START_PORT: '2353'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5441'
+          FLYWAY_START_PORT: '2354'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5442'
+          FLYWAY_START_PORT: '2355'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5443'
+          FLYWAY_START_PORT: '2356'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5444'
+          FLYWAY_START_PORT: '2357'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5445'
+          FLYWAY_START_PORT: '2358'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5446'
+          FLYWAY_START_PORT: '2359'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+        environment:
+          PGPORT: '5447'
+          FLYWAY_START_PORT: '2360'
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    working_directory: /home/curry/merlon
+    resource_class: 2xlarge
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /work
+      - run:
+          name: install java for fitnesse
+          command: |
+            apt update && apt install -y default-jre
+      - wait_for_postgres
+      - run:
+          name: wait for extra pg instances
+          command: |
+            dockerize -wait tcp://localhost:5433 -timeout 1m
+            dockerize -wait tcp://localhost:5434 -timeout 1m
+            dockerize -wait tcp://localhost:5435 -timeout 1m
+            dockerize -wait tcp://localhost:5436 -timeout 1m
+            dockerize -wait tcp://localhost:5437 -timeout 1m
+            dockerize -wait tcp://localhost:5438 -timeout 1m
+            dockerize -wait tcp://localhost:5439 -timeout 1m
+            dockerize -wait tcp://localhost:5440 -timeout 1m
+            dockerize -wait tcp://localhost:5441 -timeout 1m
+            dockerize -wait tcp://localhost:5442 -timeout 1m
+            dockerize -wait tcp://localhost:5443 -timeout 1m
+            dockerize -wait tcp://localhost:5444 -timeout 1m
+            dockerize -wait tcp://localhost:5445 -timeout 1m
+            dockerize -wait tcp://localhost:5446 -timeout 1m     
+            dockerize -wait tcp://localhost:5447 -timeout 1m
+      - run:
+          name: Execute the fitnesse pages
+          command: |
+            mkdir -p /tmp/test-results
+            /work/merc test fitnesse \
+              --retries 5 \
+              --groups 16 \
+              --junit-output-dir /tmp/test-results \
+              --postgres-base-port 5432 \
+              --repo-root /home/curry/merlon \
+              --skip-cleanup
+      - run:
+          name: report raw junit
+          command: cat /tmp/test-results/*junit*.xml
+          when: always
+      - store_test_results:
+          path: /tmp/test-results
+          when: always
+      - run:
+          name: move generated tests
+          command: mv /home/curry/merlon/specs/src/fitnesse/FrontPage/MercTestFitnesse*.wiki /tmp/test-results
+          when: always
+      - store_artifacts:
+          path: /tmp/test-results
+          destination: test-results
+      - store_artifacts:
+          path: /home/curry/merlon/specs/src/fitnesse/files/testResults
+          destination: test-output
+
+  # ------------------
+  # Frontend (ReactJS)
+  # ------------------
+
+  frontend_docker:
+    docker:
+      - image: gcr.io/merlon-dev-294616/ci-ops
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    steps:
+      - checkout
+      - setup_remote_docker
+      - attach_workspace:
+          at: /work
+      - run:
+          name: Build image
+          command: |
+            . ~/project/.circleci/gcloud-auth.sh
+            mkdir -p ~/project/frontend/servicer/src/generated
+
+            cp -r /work/generated/ui_actions.ts ~/project/frontend/servicer/src/generated/ui_actions.ts
+            cp -r /work/generated/contract.d.ts ~/project/frontend/servicer/src/generated/contract.d.ts
+
+            /work/merc build frontend --tag $CIRCLE_SHA1 --repo-root $HOME/project --graphql-tag $CIRCLE_SHA1
+            /work/merc push frontend --tag $CIRCLE_SHA1
+
+  # ------------------
+  # Koa
+  # ------------------
+
+  facile_generator:
+    docker:
+      - image: gcr.io/merlon-dev-294616/assembly-sdk:<< pipeline.parameters.platform-tag >>
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/project
+      - run:
+          name: Generate middleware client contract code
+          working_directory: prod/gke-dev/merlon
+          command: |
+            export PATH=$PATH:$(pwd)
+            . ~/project/.circleci/gcloud-auth.sh
+
+            export PATH=/opt/symbiont/assembly-sdk/current/bin:$PATH
+
+            ~/project/merc deploy generate-koa-client --config ~/project/merc_settings.yaml --repo-root ~/project
+      - persist_to_workspace:
+          root: ~/project/middleware/src
+          paths:
+            - generated
+
+  koa_docker:
+    docker:
+      - image: gcr.io/merlon-dev-294616/ci-ops
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /work
+      - attach_workspace:
+          at: ~/project/middleware/src
+      - setup_remote_docker
+      - run:
+          name: Build image
+          command: |
+            . ~/project/.circleci/gcloud-auth.sh
+            /work/merc build koa --repo-root $HOME/project --tag $CIRCLE_SHA1 --koa-tag $CIRCLE_SHA1
+            /work/merc push koa --tag $CIRCLE_SHA1
+
+  # -------------
+  # Graphql layer
+  # -------------
+
+  graphql_generator:
+    docker:
+      - image: gcr.io/merlon-dev-294616/generator:1.26
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    working_directory: /merlon
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /work
+      - run:
+          name: Generate graphql from contracts
+          command: |
+            /bin/merlon_graphql.sh > /work/schema.graphql
+      - persist_to_workspace:
+          root: /work
+          paths:
+            - schema.graphql
+
+  graphql_docker:
+    docker:
+      - image: gcr.io/merlon-dev-294616/ci-ops
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /work
+      - setup_remote_docker
+      - run:
+          name: Build image
+          command: |
+            . ~/project/.circleci/gcloud-auth.sh
+            mkdir -p graphql/generated
+            cp /work/schema.graphql graphql/generated/schema.graphql
+            /work/merc build graphql --repo-root $HOME/project --tag $CIRCLE_SHA1 --skip-schema-generation
+            /work/merc push graphql --tag $CIRCLE_SHA1
+
+  nginx_proxy_docker:
+    docker:
+      - image: gcr.io/merlon-dev-294616/ci-ops
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    steps:
+      - checkout
+      - setup_remote_docker
+      - attach_workspace:
+          at: /work
+      - run:
+          name: Build image
+          command: |
+            . ~/project/.circleci/gcloud-auth.sh
+            /work/merc build nginx-proxy --tag $CIRCLE_SHA1 --repo-root $HOME/project
+            /work/merc push nginx-proxy --tag $CIRCLE_SHA1
+
+  # ----------------------
+  # Kubernetes deployments
+  # ----------------------
+
+  deploy-merlon:
+    docker:
+      - image: gcr.io/merlon-dev-294616/sdk:<< pipeline.parameters.platform-tag >>
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /work
+      - run:
+          name: Notify Slack of upcoming redeploy (master only)
+          # this is not great but we collectively agree it's the easiest path forward
+          working_directory: packer/ansible/roles/fitnesse/files
+          command: |
+            if [ $CIRCLE_BRANCH = "master" ]; then
+              ./slack '#rs-sym-notifications' ":rocket: Circle CI is deploying the ${CIRCLE_BRANCH} branch" || true
+            fi
+      - run:
+          name: Deploy app on mock-network
+          working_directory: prod/gke-dev/merlon
+          command: |
+            . ~/project/.circleci/gcloud-auth.sh
+            . ~/project/.circleci/ftp-auth.sh
+
+            export DEPLOYMENT_NAME=$(~/project/.circleci/deployment-name.py $CIRCLE_BRANCH)
+            export PATH=$PATH:$(pwd)
+            /work/merc deploy \
+              --deployment-name ${DEPLOYMENT_NAME} \
+              --merlon-tag ${CIRCLE_SHA1}
+            # just sleeping a bit to ensure it comes up, we need a ready check before deploy returns
+            echo "merc deploy completed, but sleeping 60s to ensure fully up"
+            sleep 60
+
+            echo "saving ip and domain for future steps"
+            mkdir -p /work
+            APP_IP1="$(gcloud compute addresses --format="value(address)" list --filter=app-${DEPLOYMENT_NAME}-1)"
+            APP_IP2="$(gcloud compute addresses --format="value(address)" list --filter=app-${DEPLOYMENT_NAME}-1)"
+
+            APP_DOMAIN1="${DEPLOYMENT_NAME}-1.merlon.dev"
+            echo "$APP_IP1 $APP_DOMAIN1" >> /work/etc_hosts
+            APP_DOMAIN2="${DEPLOYMENT_NAME}-2.merlon.dev"
+            echo "$APP_IP2 $APP_DOMAIN1" >> /work/etc_hosts
+      - run:
+          name: Notify Slack of finished redeploy (master only)
+          working_directory: packer/ansible/roles/fitnesse/files
+          command: |
+            if [ $CIRCLE_BRANCH = "master" ]; then
+              APP_DOMAIN1="https://${CIRCLE_BRANCH}-1.merlon.dev"
+              APP_DOMAIN2="https://${CIRCLE_BRANCH}-2.merlon.dev"
+              ./slack '#rs-sym-notifications' ":tada: Circle CI finished deploying the ${CIRCLE_BRANCH} branch at ${APP_DOMAIN1} and ${APP_DOMAIN2}" || true
+            fi
+      - persist_to_workspace:
+          root: /work
+          paths:
+            - etc_hosts
+
+##############
+# Smoke Test #
+##############
+  smoke-test-mock-network:
+    docker:
+      - image: circleci/node:12
+    environment:
+      - APP_NODE: '1'
+    steps:
+      - checkout
+      - run:
+          name: mkdir ~/work
+          command: |
+            mkdir ~/work
+      - attach_workspace:
+          at: ~/work
+      - run:
+          name: Load IP and Domain for the app
+          command: |
+            cat ~/work/etc_hosts | sudo tee -a /etc/hosts
+      - run:
+          name: Install Headless Chrome dependencies
+          command: |
+            sudo apt-get install -yq \
+            gconf-service libasound2 libatk1.0-0 libatk-bridge2.0-0 libc6 libcairo2 libcups2 libdbus-1-3 \
+            libexpat1 libfontconfig1 libgcc1 libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 libnspr4 \
+            libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 \
+            libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 ca-certificates \
+            fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget
+      - restore_cache:
+          keys:
+            - v2-e2e-npm-{{ checksum "e2e/package-lock.json" }}
+            - v2-e2e-npm-
+      - run:
+          name: Install dependencies
+          working_directory: ~/project/e2e
+          command: |
+            npm ci
+      - run:
+          name: Single smoke test for node 1
+          working_directory: ~/project/e2e
+          command: |
+            export DEPLOYMENT_NAME=$(~/project/.circleci/deployment-name.py $CIRCLE_BRANCH)
+            export MERLON_URL="https://${DEPLOYMENT_NAME}-${APP_NODE}.merlon.dev"
+            echo "Waiting for site to come up (5 minutes)"
+            attempts_remaining=72
+            # Curl until we get a 403 from app (sigals that oauth2 proxy is up and running)
+            res=$(curl --output /dev/null --silent --head --insecure --write-out '%{http_code}' "$MERLON_URL")
+            until [ $res = "403" ]; do
+              if [ ${attempts_remaining} -eq 0 ]; then
+                echo "Timeout waiting for site to come up"
+                exit 1
+              fi
+              printf '.'
+              attempts_remaining=$(($attempts_remaining-1))
+              sleep 5
+              res=$(curl --output /dev/null --silent --head --insecure --write-out '%{http_code}' "$MERLON_URL")
+              echo "Response from f/e: "
+              echo "$res" 
+            done
+            npm run smoke-test 
+      - save_cache:
+          key: v2-e2e-npm-{{ checksum "e2e/package-lock.json" }}
+          paths:
+            - e2e/node_modules
+            - e2e/node_modules/puppeteer/.local-chromium
+
+  # -----------
+  # E2E testing
+  # -----------
+  e2e-merc-local:
+    machine:
+      image: ubuntu-2004:202010-01
+      resource_class: large
+    parallelism: 6
+    steps:
+      - checkout
+      - run:
+          name: mkdir ~/work
+          command: |
+            mkdir ~/work
+      - attach_workspace:
+          at: ~/work
+      - run:
+          name: install gcloud sdk
+          command: |
+            echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+            sudo apt-get install apt-transport-https ca-certificates gnupg
+            curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+            sudo apt-get update -y && sudo apt-get install -yq google-cloud-sdk
+      - run:
+          name: install assembly-sdk & various merc things
+          command: |
+            . ~/project/.circleci/gcloud-auth.sh
+            sudo mkdir /opt/symbiont
+            sudo chown circleci:circleci /opt/symbiont
+            # this has an ignored exit code as it'll warn on a missing python sdk config, which we obviously don't have here
+             ~/work/merc assembly set-version --repo-root ~/project || true
+            sudo mkdir -p /home/curry/credentials
+            sudo chown circleci:circleci /home/curry/credentials
+            ~/work/merc secrets download --destination-dir /home/curry/credentials --secret merlon-oauth2-proxy.cfg
+            ~/work/merc secrets download --destination-dir /home/curry/credentials --secret oauth2-cert.pem
+            ~/work/merc secrets download --destination-dir /home/curry/credentials --secret oauth2-key.pem
+      - run:
+          name: install nodejs/npm and headless chrome dpendencies
+          command: |
+            # no update needed here as it comes from the above step!
+            sudo apt-get install -yq \
+            nodejs npm gconf-service libasound2 libatk1.0-0 libatk-bridge2.0-0 libc6 libcairo2 libcups2 libdbus-1-3 \
+            libexpat1 libfontconfig1 libgcc1 libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 libnspr4 \
+            libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 \
+            libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 ca-certificates \
+            fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget
+      - run:
+          name: install cypress npm dependencies
+          working_directory: ~/project/e2e
+          command: |
+            npm ci
+      - run:
+          name: start local merlon
+          working_directory: ~/project/e2e
+          command: |
+            export PATH="/opt/symbiont/assembly-sdk/current/contract-vm/bin:${PATH}"
+            ~/work/merc local with-frontend --merlon-tag=${CIRCLE_SHA1}
+      - run:
+          name: run cypress tests
+          working_directory: ~/project/e2e
+          command: |
+            export RESULTS_DIR=$HOME/project/e2e/results
+            mkdir $RESULTS_DIR
+            export CYPRESS_FAIL_FAST=true
+            npm run circleci
+      - run:
+          when: always
+          command: |
+            mkdir -p /tmp/deploy-logs/
+            for container in nginx-proxy rex-frontend rex-graphql rex-koa oauth2proxy api-server
+            do
+              docker logs ${container} > /tmp/deploy-logs/${container}.log
+            done
+      - store_artifacts:
+          path: /tmp/deploy-logs/
+          destination: logs
+
+      - store_artifacts:
+          path: ~/project/results
+          destination: results
+
+      - store_artifacts:
+          path: ~/project/e2e/results
+          destination: e2e/results
+
+      - store_artifacts:
+          path: e2e/cypress/videos
+          destination: videos
+
+      - store_artifacts:
+          path: e2e/cypress/screenshots
+          destination: screenshots
+
+      - store_test_results:
+          path: ~/project/e2e/results
+
+  # --------------------
+  # merc mob refresh-ssh
+  # --------------------
+
+  merc_mob_refresh_ssh:
+    docker:
+      - image: gcr.io/merlon-dev-294616/ci-ops
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    working_directory: ~/project
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /work
+      - run:
+          name: Refresh user ssh keys on all mob machines
+          command: |
+            . ~/project/.circleci/gcloud-auth.sh
+            /work/merc mob refresh-ssh
+
+  # ----------
+  # benchmarks
+  # ----------
+
+  benchmarks-all: &benchmarks
+    docker:
+      - image: gcr.io/merlon-dev-294616/sdk:<< pipeline.parameters.platform-tag >>
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+      # when we specify a second image, circleci will run it in the background for a test. as our local mode
+      # requires postgres, we run postgres in the background
+      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
+
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    environment:
+      - FLAGS: '--heartbeat'
+    working_directory: ~/project
+    steps:
+      - checkout
+      - wait_for_postgres
+      - run:
+          name: Run contract benchmarks
+          no_output_timeout: 30m
+          working_directory: contracts
+          # TODO we're running benchmarks with the syntax-check flag. Distinguish between that case,
+          # which is fine on regular builds on any branch, and "for realsies" benchmarks, that we want
+          # to run nightly on master.
+          command: |
+            set -o xtrace
+            export ASSEMBLY_CONTRACT_PATH=~/project/contracts
+
+            assembly-sdk test tests/benchmarks.py -- -s -vv --benchmarks --benchmark-enable --benchmark-group-by=func --benchmark-verbose --benchmark-histogram=histo --skip-reset-publish $FLAGS
+            mkdir /tmp/test-results
+            cp *.svg /tmp/test-results
+
+      - store_artifacts:
+          path: /tmp/test-results
+          destination: benchmark-results
+
+  benchmarks-tiny:
+    <<: *benchmarks
+    environment:
+      - FLAGS: '--size tiny --skip-parallelism'
+
+  # ----------
+  # packer
+  # ----------
+
+  packer_docker:
+    docker:
+      - image: gcr.io/merlon-dev-294616/ci-ops
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    working_directory: ~/project
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Build image
+          working_directory: .circleci/images/packer
+          command: |
+            . ~/project/.circleci/gcloud-auth.sh
+
+            docker build -t gcr.io/merlon-dev-294616/packer:$CIRCLE_SHA1 .
+            docker push gcr.io/merlon-dev-294616/packer:$CIRCLE_SHA1
+
+  packer:
+    docker:
+      - image: gcr.io/merlon-dev-294616/packer:$CIRCLE_SHA1
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    working_directory: ~/project
+    steps:
+      - checkout
+      - run:
+          name: Run packer build
+          no_output_timeout: 30m
+          working_directory: packer
+          command: |
+            if [ -z "$KUBECONFIG_JSON" ]; then
+              echo "KUBECONFIG_JSON is required to be set" >&2
+              exit 1
+            fi
+            mkdir -p ~/credentials
+            echo "$KUBECONFIG_JSON" > ~/credentials/kubeconfig-merlon-ci-central1.json
+
+            echo "Authenticating with gcloud"
+            . ~/project/.circleci/gcloud-auth.sh
+
+            packer build packer.json
+
+  # ----------
+  # deployment cleanup
+  # ----------
+
+  clean_deployments:
+    docker:
+      - image: gcr.io/merlon-dev-294616/ci-ops
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    working_directory: ~/project
+    steps:
+      - checkout
+      - run:
+          name: run cleanup script
+          no_output_timeout: 30m
+          working_directory: ~/project/.circleci
+          command: |
+            set -o xtrace
+            . ./gcloud-auth.sh
+            ./get-kubectl.sh
+            ./cleanup-old-deployments.sh
+
+  # ----------
+  # shutdown mobs to save money
+  # ----------
+
+  stop_mobs:
+    docker:
+      - image: gcr.io/merlon-dev-294616/ci-ops
+        auth:
+          username: _json_key
+          password: $GCLOUD_CI_SA_JSON
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /work
+      - run:
+          name: Pause all mob machines
+          command: |
+            . ~/project/.circleci/gcloud-auth.sh
+            /work/merc mob list -q --without-tag no-auto-stop | xargs /work/merc mob stop
+
+workflows:
+  version: 2
+
+  test-build-deploy:
+    jobs:
+      - build_merc
+      - contracts_validate
+      - documentation
+      - graphql_generator
+      - benchmarks-tiny
+      - autogen_validate
+      - koa_docker:
+          requires:
+            - facile_generator
+
+      - facile_generator:
+          requires:
+            - build_merc
+
+      - sailfish:
+          requires:
+            - build_merc
+
+      - fitnesse:
+          requires:
+            - build_merc
+
+      - merc_mob_refresh_ssh:
+          filters:
+            branches:
+              only:
+                - master
+          requires:
+            - build_merc
+
+      - frontend_docker:
+          requires:
+            - graphql_docker
+            - build_merc
+            - facile_generator
+
+      - graphql_docker:
+          requires:
+            - build_merc
+            - graphql_generator
+
+      - nginx_proxy_docker:
+          requires:
+            - graphql_docker
+            - build_merc
+
+      - deploy-merlon:
+          # Wait until *just* before we need it.
+          requires:
+            - frontend_docker
+            - koa_docker
+            - build_merc
+
+      - smoke-test-mock-network:
+          requires:
+            - deploy-merlon
+
+      - file_agent_docker:
+          requires:
+            - build_merc
+
+      - e2e-merc-local:
+          requires:
+            - build_merc
+            - frontend_docker
+            - koa_docker
+            - graphql_docker
+            - nginx_proxy_docker
+
+      - alarm_clock_docker:
+          requires:
+            - build_merc
+
+  nightly:
+    triggers:
+      - schedule:
+          cron: '0 2 * * *' # use cron syntax to set the schedule
+          filters:
+            branches:
+              only:
+                - master
+    jobs:
+      - packer_docker
+      - packer:
+          requires:
+            - packer_docker
+      - build_merc
+      - stop_mobs:
+          requires:
+            - build_merc
+
+  deployment_cleanup:
+    triggers:
+      - schedule:
+          cron: '0 9-23 * * *' # use cron syntax to set the schedule
+          filters:
+            branches:
+              only:
+                - master
+    jobs:
+      - clean_deployments
