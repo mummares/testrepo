@@ -1,42 +1,8 @@
 version: 2.1
-
 jobs:
-  # ---------------
-  # Merlon Tooling
-  # ---------------
-
-  autogen_validate:
+  build:
     docker:
-      - image: gcr.io/merlon-dev-294616/sdk:<< pipeline.parameters.platform-tag >>
-        auth:
-          username: _json_key
-          password: $GCLOUD_CI_SA_JSON
-      - image: gcr.io/merlon-dev-294616/postgres:<< pipeline.parameters.platform-tag >>
-        environment:
-          PGPORT: '5432'
-          FLYWAY_START_PORT: '2345'
-        auth:
-          username: _json_key
-          password: $GCLOUD_CI_SA_JSON
-    environment:
-      - PYTHONDONTWRITEBYTECODE: 1
-    working_directory: ~/project
+      - image: circleci/node:4.8.2
     steps:
       - checkout
-      - run:
-          name: autogen validate
-          command: |
-            set -o xtrace
-            cd autogenerate
-            # we're not forcing the first one explicitly - so if you change example and commit it
-            # breaks so you catch it
-            python3 autogenerate.py --yaml-schema circle.yaml
-            cd ../contracts
-            pytest --contract-path . tests/circle_test.py --skip-validate -s -vvv
-
-            cd ../autogenerate
-            python3 autogenerate.py --yaml-schema circle.yaml --force --template loan_subdomain
-            cd ../contracts
-            pytest --contract-path . tests/circle_test.py --skip-validate -s -vvv
-
-  
+      - run: echo "A first hello"
