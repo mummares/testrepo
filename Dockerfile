@@ -8,7 +8,6 @@ workflows:
           account-url: https://592678693542.signin.aws.amazon.com/console
           aws-access-key-id: ${AccessKey}
           aws-secret-access-key: ${SecrectKey}
-          context: myContext
           create-repo: true
           dockerfile: Dockerfile
           no-output-timeout: 20m
