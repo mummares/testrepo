@@ -8,6 +8,7 @@ workflows:
           account-url: https://592678693542.signin.aws.amazon.com/console
           aws-access-key-id: ${AccessKey}
           aws-secret-access-key: ${SecrectKey}
+          context:https://circleci.com/docs/2.0/contexts
           create-repo: true
           dockerfile: Dockerfile
           no-output-timeout: 20m
