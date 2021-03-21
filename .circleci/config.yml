@@ -17,6 +17,6 @@ workflows:
           path: .
           profile-name: default
           region: AWS_REGION
-          repo: ecrrepo1
+          repo: ecrrepo
           skip-when-tags-exist: false
           tag: 'latest,myECRRepoTag'
