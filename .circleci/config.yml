@@ -18,4 +18,4 @@ workflows:
           region: AWS_REGION
           repo: ecrrepo
           skip-when-tags-exist: false
-          tag: '${CIRCLE_SHA1},latest,myECRRepoTag'
+          tag: '${CIRCLE_SHA1},myECRRepoTag'
