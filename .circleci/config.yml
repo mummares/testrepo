@@ -16,6 +16,6 @@ workflows:
           path: .
           profile-name: default
           region: AWS_REGION
-          repo: ecrrepo
+          repo: ecrrepo1
           skip-when-tags-exist: false
           tag: '${CIRCLE_SHA1}'
